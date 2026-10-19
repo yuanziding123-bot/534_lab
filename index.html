@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Treasury Market Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --surface: #f2f0ec;
+    --surface-2: #e9e6e0;
+    --text: #1d1c1a;
+    --muted: #6b6760;
+    --line: #2b2a27;
+    --hair: #dcd8d0;
+    --accent: #1f4e79;
+    --up: #b4361f;
+    --down: #2d6a3e;
+    --c1: #1d1c1a;
+    --c2: #1f6fb2;
+    --c3: #c2652a;
+    --c4: #6c8f3a;
+    --c5: #8a5aa8;
+    --band1: rgba(31, 111, 178, 0.14);
+    --band2: rgba(31, 111, 178, 0.28);
+    --serif: "Source Serif 4", Georgia, serif;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161514; --surface: #201f1d; --surface-2: #2a2926; --text: #ece9e3; --muted: #a29d94;
+      --line: #d9d5cd; --hair: #3a3834; --accent: #8db8e0; --up: #ef8a73; --down: #7cc58f;
+      --c1: #ece9e3; --c2: #6aaee8; --c3: #e8995f; --c4: #a7c76e; --c5: #c39be0;
+      --band1: rgba(106, 174, 232, 0.16); --band2: rgba(106, 174, 232, 0.32);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161514; --surface: #201f1d; --surface-2: #2a2926; --text: #ece9e3; --muted: #a29d94;
+    --line: #d9d5cd; --hair: #3a3834; --accent: #8db8e0; --up: #ef8a73; --down: #7cc58f;
+    --c1: #ece9e3; --c2: #6aaee8; --c3: #e8995f; --c4: #a7c76e; --c5: #c39be0;
+    --band1: rgba(106, 174, 232, 0.16); --band2: rgba(106, 174, 232, 0.32);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--sans); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+  header .byline { color: var(--muted); font-size: 14px; }
+  h1 { font: 700 40px/1.15 var(--serif); margin: 6px 0 6px; letter-spacing: -0.01em; }
+  h2 { font: 600 22px/1.3 var(--serif); margin: 36px 0 12px; }
+  .sub { color: var(--muted); margin: 0; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; cursor: pointer; user-select: none; }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--text); }
+
+  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); margin: 24px 0 24px; overflow-x: auto; scrollbar-width: none; }
+  nav.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font: 500 15px var(--sans); color: var(--muted); cursor: pointer; white-space: nowrap; }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .kpi { background: var(--surface); border-top: 2px solid var(--line); padding: 12px 14px 14px; }
+  .kpi .lab { font-size: 13px; color: var(--muted); }
+  .kpi .val { font-size: 28px; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .kpi .chg { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .up { color: var(--up) !important; }
+  .down { color: var(--down) !important; }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+
+  .callout { background: var(--surface); border: 1px solid var(--hair); border-radius: 4px; padding: 14px 18px; margin: 18px 0; }
+  .callout p { margin: 4px 0; }
+  .explain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .explain { background: var(--surface-2); border-left: 3px solid var(--line); padding: 14px 18px; font-family: var(--serif); font-size: 16px; }
+  .explain .t { font: 600 14px var(--sans); margin-bottom: 4px; }
+  .explain ol { margin: 4px 0 0; padding-left: 20px; }
+  body.no-explain .explain, body.no-explain .explain-grid { display: none; }
+
+  .grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 32px; align-items: start; }
+  .chart-box { position: relative; height: 340px; }
+  .chart-box.tall { height: 400px; }
+  .chart-box.short { height: 260px; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+  th, td { padding: 8px 8px; text-align: right; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+  th { font-weight: 500; color: var(--muted); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { border-bottom: 1px solid var(--line); }
+  .table-scroll { overflow-x: auto; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; margin: 8px 0 18px; }
+  .ctl { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+  select, .btn { font: 15px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--hair); border-radius: 4px; padding: 7px 10px; }
+  .btn { cursor: pointer; border-color: var(--line); padding: 8px 16px; }
+  .btn:hover { background: var(--surface); }
+  .seg { display: inline-flex; border: 1px solid var(--hair); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; background: var(--bg); color: var(--muted); padding: 7px 12px; font: 14px var(--sans); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--hair); }
+  .seg button.on { background: var(--text); color: var(--bg); }
+  input[type="range"] { accent-color: var(--text); width: 200px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--hair); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; background: var(--bg); color: var(--muted); }
+  .chip.on { border-color: var(--line); color: var(--text); font-weight: 500; }
+
+  footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--muted); font-size: 13px; }
+  footer a { color: inherit; }
+  .loading { color: var(--muted); padding: 40px 0; }
+
+  @media (max-width: 820px) {
+    h1 { font-size: 30px; }
+    .grid2, .explain-grid { grid-template-columns: 1fr; }
+    .chart-box, .chart-box.tall { height: 280px; }
+    .kpi .val { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="byline">Yuanzi Ding · 534 Lab</div>
+    <div class="head-row">
+      <div>
+        <h1>Treasury market dashboard</h1>
+        <p class="sub" id="asof">Loading data…</p>
+      </div>
+      <label class="toggle"><input type="checkbox" id="explainToggle" checked> Show explanations</label>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button role="tab" data-tab="yields">Yields</button>
+    <button role="tab" data-tab="spreads">Spreads</button>
+    <button role="tab" data-tab="inflation">Inflation</button>
+    <button role="tab" data-tab="scenarios">Scenarios</button>
+    <button role="tab" data-tab="montecarlo">Monte Carlo</button>
+  </nav>
+
+  <div id="loading" class="loading">Fetching data.json…</div>
+
+  <!-- OVERVIEW -->
+  <section class="panel active" id="overview">
+    <div class="kpis" id="kpis"></div>
+    <p class="note">Yield changes are red when yields rose, because rising yields mean falling bond prices.</p>
+    <div class="callout" id="overviewText"></div>
+    <div class="grid2">
+      <div>
+        <h2>Yield curve</h2>
+        <div class="chart-box"><canvas id="curveChart"></canvas></div>
+      </div>
+      <div>
+        <h2>Change in yields (bp)</h2>
+        <div class="table-scroll"><table id="changeTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- YIELDS -->
+  <section class="panel" id="yields">
+    <div class="explain-grid">
+      <div class="explain"><div class="t">What is a Treasury yield?</div>
+        The yield is the annual return an investor locks in by buying a U.S. government bond today and holding it to maturity. Because Treasuries are treated as free of default risk, their yields are the benchmark that mortgages, corporate loans and stock valuations are priced against.</div>
+      <div class="explain"><div class="t">How to read this chart</div>
+        Short maturities (3 months, 2 years) mostly track where markets expect the Federal Reserve to set rates. Long maturities (10, 30 years) also reflect growth, inflation and the extra pay investors demand for locking money up longer.</div>
+    </div>
+    <div class="controls">
+      <div class="ctl">Maturities<div class="chips" id="tenorChips"></div></div>
+      <div class="ctl">Range<div class="seg" id="yieldRange"></div></div>
+    </div>
+    <div class="chart-box tall"><canvas id="yieldChart"></canvas></div>
+    <div class="callout" id="yieldText"></div>
+  </section>
+
+  <!-- SPREADS -->
+  <section class="panel" id="spreads">
+    <div class="explain-grid">
+      <div class="explain"><div class="t">Term spreads</div>
+        The gap between long and short yields measures the slope of the curve. When the 10-year falls below the 2-year or 3-month yield, the curve is <em>inverted</em>: markets expect rate cuts ahead, and inversions have preceded every U.S. recession since the 1970s.</div>
+      <div class="explain"><div class="t">Credit spreads</div>
+        Option-adjusted spreads (ICE BofA indices) show how much extra yield corporate borrowers pay over Treasuries. They widen when investors fear defaults, so they are a quick read on risk appetite.</div>
+    </div>
+    <div class="controls"><div class="ctl">Range<div class="seg" id="spreadRange"></div></div></div>
+    <h2>Term spreads (bp)</h2>
+    <div class="chart-box"><canvas id="termChart"></canvas></div>
+    <div class="callout" id="spreadText"></div>
+    <h2>Corporate credit spreads (bp)</h2>
+    <div class="chart-box short"><canvas id="creditChart"></canvas></div>
+    <p class="note">FRED publishes only the most recent three years of ICE BofA spread history.</p>
+  </section>
+
+  <!-- INFLATION -->
+  <section class="panel" id="inflation">
+    <div class="explain-grid">
+      <div class="explain"><div class="t">Realized inflation</div>
+        CPI inflation is the year-over-year change in consumer prices measured by the Bureau of Labor Statistics. <em>Core</em> excludes food and energy, which are volatile, so it is a better guide to the underlying trend.</div>
+      <div class="explain"><div class="t">Expected inflation</div>
+        The breakeven rate is the nominal Treasury yield minus the TIPS (inflation-protected) yield. It is the inflation rate at which the two bonds would pay the same, so it is the market's own forecast. The nominal yield minus breakeven is the <em>real</em> yield.</div>
+    </div>
+    <div class="kpis" id="inflKpis"></div>
+    <div class="controls" style="margin-top:18px"><div class="ctl">Range<div class="seg" id="inflRange"></div></div></div>
+    <div class="grid2">
+      <div>
+        <h2>CPI inflation, year over year (%)</h2>
+        <div class="chart-box"><canvas id="cpiChart"></canvas></div>
+      </div>
+      <div>
+        <h2>Breakevens and real 10 yr yield (%)</h2>
+        <div class="chart-box"><canvas id="beChart"></canvas></div>
+      </div>
+    </div>
+    <div class="callout" id="inflText"></div>
+  </section>
+
+  <!-- SCENARIOS -->
+  <section class="panel" id="scenarios">
+    <div class="explain-grid">
+      <div class="explain"><div class="t">Why scenarios?</div>
+        Bond prices move opposite to yields, and longer bonds move more. A scenario applies a hypothetical shock to today's curve and reprices a par bond at each maturity, so you can see who wins and who loses.</div>
+      <div class="explain"><div class="t">The named shapes</div>
+        <em>Bear</em> means yields rise (prices fall), <em>bull</em> means yields fall. <em>Steepener</em> means the long end moves up more (or down less) than the short end; <em>flattener</em> is the reverse.</div>
+    </div>
+    <div class="controls">
+      <div class="ctl">Scenario<div class="chips" id="scenChips"></div></div>
+    </div>
+    <div class="controls" id="customCtl">
+      <div class="ctl">Short end (3 mo) shift: <b id="shortLab"></b><input type="range" id="shortShift" min="-200" max="200" step="5" value="0"></div>
+      <div class="ctl">Long end (30 yr) shift: <b id="longLab"></b><input type="range" id="longShift" min="-200" max="200" step="5" value="0"></div>
+    </div>
+    <div class="grid2">
+      <div>
+        <h2>Today's curve and the shocked curve</h2>
+        <div class="chart-box"><canvas id="scenChart"></canvas></div>
+      </div>
+      <div>
+        <h2>Instant price impact on a par bond</h2>
+        <div class="table-scroll"><table id="scenTable"></table></div>
+      </div>
+    </div>
+    <div class="callout" id="scenText"></div>
+  </section>
+
+  <!-- MONTE CARLO -->
+  <section class="panel" id="montecarlo">
+    <div class="explain-grid">
+      <div class="explain"><div class="t">Why run a simulation at all?</div>
+        Nobody knows where yields will be in six months. A single forecast hides that uncertainty. A Monte Carlo simulation does the opposite: it generates thousands of possible futures, each one a random path that behaves the way the yield has behaved in the past. Looking at all of them together shows the <em>range</em> of outcomes and lets us attach rough probabilities to them, including to the scenarios on the previous tab.</div>
+      <div class="explain"><div class="t">How it works, in four steps</div>
+        <ol>
+          <li><b>Learn from history.</b> Measure how much the yield typically moves in a day, and whether it tends to drift back toward a long-run level.</li>
+          <li><b>Roll the dice.</b> Starting from today's yield, add a random daily move, day after day, to build one path.</li>
+          <li><b>Repeat thousands of times.</b> Each repeat is one possible future.</li>
+          <li><b>Count.</b> The share of paths where something happens is our estimate of its probability.</li>
+        </ol></div>
+    </div>
+    <div class="controls">
+      <label class="ctl">Yield<select id="mcTenor"></select></label>
+      <div class="ctl">Horizon: <b id="mcHorizonLab"></b><input type="range" id="mcHorizon" min="1" max="24" value="6"></div>
+      <label class="ctl">Model<select id="mcModel">
+        <option value="vasicek">Mean-reverting (Vasicek)</option>
+        <option value="rw">Random walk</option>
+      </select></label>
+      <label class="ctl">Learn from the last<select id="mcLookback">
+        <option value="1">1 year</option><option value="3">3 years</option>
+        <option value="5" selected>5 years</option><option value="10">10 years</option><option value="20">20 years</option>
+      </select></label>
+      <label class="ctl">Paths<select id="mcPaths">
+        <option>1000</option><option selected>5000</option><option>10000</option>
+      </select></label>
+      <button class="btn" id="mcRun">Draw new random paths</button>
+    </div>
+    <div class="kpis" id="mcKpis"></div>
+    <div class="callout" id="mcText"></div>
+    <div class="grid2">
+      <div>
+        <h2>Range of simulated paths</h2>
+        <div class="chart-box"><canvas id="fanChart"></canvas></div>
+        <p class="note">Dark band: middle 50% of paths. Light band: middle 90%. Thin lines: five individual paths.</p>
+      </div>
+      <div>
+        <h2>Where the paths end</h2>
+        <div class="chart-box short"><canvas id="histChart"></canvas></div>
+        <h2>Probability of the scenario moves</h2>
+        <table id="mcProbTable"></table>
+      </div>
+    </div>
+    <div class="callout" id="mcParams"></div>
+  </section>
+
+  <footer>
+    Source: U.S. Treasury, Bureau of Labor Statistics and ICE BofA, via <a href="https://fred.stlouisfed.org/" target="_blank" rel="noopener">FRED</a>, Federal Reserve Bank of St. Louis.
+    Data is refreshed by a scheduled GitHub Action. <span id="updated"></span> For learning purposes only, not investment advice.
+  </footer>
+</div>
+
+<script>
+const TENORS = [
+  { id: "DGS3MO", label: "3 mo", years: 0.25 },
+  { id: "DGS6MO", label: "6 mo", years: 0.5 },
+  { id: "DGS1", label: "1 yr", years: 1 },
+  { id: "DGS2", label: "2 yr", years: 2 },
+  { id: "DGS5", label: "5 yr", years: 5 },
+  { id: "DGS7", label: "7 yr", years: 7 },
+  { id: "DGS10", label: "10 yr", years: 10 },
+  { id: "DGS20", label: "20 yr", years: 20 },
+  { id: "DGS30", label: "30 yr", years: 30 },
+];
+const RANGES = [["1Y", 1], ["5Y", 5], ["10Y", 10], ["Max", 99]];
+const DAY = 86400000;
+let D, ASOF;
+const charts = {};
+
+// ---------- helpers ----------
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ts = (s) => Date.parse(s + "T00:00:00Z");
+const iso = (t) => new Date(t).toISOString().slice(0, 10);
+const fmtPct = (v, d = 2) => v.toFixed(d) + "%";
+const fmtBp = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v)) + " bp";
+const sbp = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
+const fmtDate = (s) => new Date(ts(s)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+const cls = (v) => (v > 0.5 ? "up" : v < -0.5 ? "down" : "");
+
+function series(id) { return D.series[id]; }
+function last(id) { const s = series(id); return { date: s.dates.at(-1), value: s.values.at(-1) }; }
+// value on the last observation at or before `date`
+function at(id, date) {
+  const s = series(id); let lo = 0, hi = s.dates.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (s.dates[m] <= date) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans < 0 ? null : s.values[ans];
+}
+function shiftDate(date, { days = 0, months = 0, years = 0 }) {
+  const d = new Date(ts(date));
+  d.setUTCFullYear(d.getUTCFullYear() + years, d.getUTCMonth() + months, d.getUTCDate() + days);
+  return iso(d);
+}
+function points(id, fromDate, transform = (v) => v) {
+  const s = series(id), out = [];
+  for (let i = 0; i < s.dates.length; i++) if (s.dates[i] >= fromDate) out.push({ x: ts(s.dates[i]), y: transform(s.values[i]) });
+  return out;
+}
+function avgBetween(id, a, b) {
+  const s = series(id); let sum = 0, n = 0;
+  s.dates.forEach((d, i) => { if (d >= a && d <= b) { sum += s.values[i]; n++; } });
+  return sum / n;
+}
+function yoy(id) {
+  const s = series(id), out = [];
+  for (let i = 12; i < s.values.length; i++) out.push({ date: s.dates[i], value: (s.values[i] / s.values[i - 12] - 1) * 100 });
+  return out;
+}
+function quantile(sorted, q) {
+  const p = (sorted.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (p - lo);
+}
+
+// ---------- chart defaults ----------
+function baseOptions({ timeAxis = true, yTitle = "", yFmt = (v) => v } = {}) {
+  const grid = css("--hair"), muted = css("--muted");
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false, normalized: true,
+    interaction: { mode: "nearest", axis: "x", intersect: false },
+    plugins: {
+      legend: { position: "top", align: "start", labels: { color: muted, boxWidth: 18, boxHeight: 2, font: { family: "Inter", size: 12 } } },
+      tooltip: {
+        callbacks: timeAxis ? { title: (items) => fmtDate(iso(items[0].parsed.x)) } : {},
+      },
+      decimation: { enabled: true, algorithm: "lttb", samples: 600 },
+    },
+    scales: {
+      x: timeAxis
+        ? { type: "linear", grid: { color: grid }, ticks: { color: muted, maxTicksLimit: 8, callback: (v) => { const d = new Date(v); return d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }); } } }
+        : { grid: { color: grid }, ticks: { color: muted } },
+      y: { grid: { color: grid }, ticks: { color: muted, callback: yFmt }, title: { display: !!yTitle, text: yTitle, color: muted } },
+    },
+    elements: { point: { radius: 0, hoverRadius: 3 }, line: { borderWidth: 1.6, tension: 0 } },
+  };
+}
+function draw(key, canvasId, config) {
+  if (charts[key]) charts[key].destroy();
+  charts[key] = new Chart(document.getElementById(canvasId), config);
+}
+function makeSeg(containerId, initial, onChange) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = RANGES.map(([l, y]) => `<button data-y="${y}" class="${y === initial ? "on" : ""}">${l}</button>`).join("");
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    el.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    onChange(+b.dataset.y);
+  });
+}
+const rangeStart = (years) => (years >= 99 ? "1900-01-01" : shiftDate(ASOF, { years: -years }));
+
+// ---------- overview ----------
+function renderOverview() {
+  const lastDate = ASOF, m1 = shiftDate(lastDate, { months: -1 }), y1 = shiftDate(lastDate, { years: -1 });
+  const kpi = (label, val, chg, unit = "%") => `<div class="kpi"><div class="lab">${label}</div><div class="val">${val}</div><div class="chg ${unit === "%" ? cls(chg) : ""}">${fmtBp(chg)}, 1 month</div></div>`;
+  const y = (id) => last(id).value, ch = (id, d) => (y(id) - at(id, d)) * 100;
+  const spread = (y("DGS10") - y("DGS2")) * 100, spreadM = (at("DGS10", m1) - at("DGS2", m1)) * 100;
+  const be = last("T10YIE").value, beM = at("T10YIE", m1);
+  document.getElementById("kpis").innerHTML =
+    kpi("3 mo yield", fmtPct(y("DGS3MO")), ch("DGS3MO", m1)) +
+    kpi("2 yr yield", fmtPct(y("DGS2")), ch("DGS2", m1)) +
+    kpi("10 yr yield", fmtPct(y("DGS10")), ch("DGS10", m1)) +
+    kpi("30 yr yield", fmtPct(y("DGS30")), ch("DGS30", m1)) +
+    kpi("10 yr minus 2 yr", (spread >= 0 ? "+" : "−") + Math.abs(Math.round(spread)) + " bp", spread - spreadM, "bp") +
+    kpi("10 yr breakeven inflation", fmtPct(be), (be - beM) * 100, "bp");
+
+  const d10 = ch("DGS10", m1), d2 = ch("DGS2", m1), flat = d2 - d10;
+  const s10 = series("DGS10"), cur = y("DGS10");
+  const share = s10.values.filter((v) => v < cur).length / s10.values.length * 100;
+  const avg10 = avgBetween("DGS10", "2016-01-01", "2019-12-31");
+  const avgSp = (avgBetween("DGS10", "2016-01-01", "2019-12-31") - avgBetween("DGS2", "2016-01-01", "2019-12-31")) * 100;
+  document.getElementById("overviewText").innerHTML =
+    `<p><b>What happened.</b> Over the past month the 10-year yield has ${d10 >= 0 ? "risen" : "fallen"} ${Math.abs(Math.round(d10))} bp and the 2-year has moved ${fmtBp(d2)}, so the curve has ${flat >= 0 ? "flattened" : "steepened"} by ${Math.abs(Math.round(flat))} bp. Against a year ago, the 10-year is ${fmtBp(ch("DGS10", y1))}.</p>
+     <p><b>How unusual is that?</b> The 10-year is at ${fmtPct(cur)}, against a 2016 to 2019 average of ${fmtPct(avg10)} and ${share >= 50 ? "higher than on " + Math.round(share) : "lower than on " + Math.round(100 - share)}% of days since 2000. The 10 yr minus 2 yr spread is ${fmtBp(spread)}, against ${fmtBp(avgSp)} in 2016 to 2019.</p>`;
+
+  // yield curve
+  const curve = (date) => TENORS.map((t) => ({ x: t.label, y: date ? at(t.id, date) : y(t.id) }));
+  draw("curve", "curveChart", {
+    type: "line",
+    data: { labels: TENORS.map((t) => t.label), datasets: [
+      { label: "1 year ago", data: curve(y1).map((p) => p.y), borderColor: css("--muted"), borderDash: [2, 3], pointRadius: 0 },
+      { label: "1 month ago", data: curve(m1).map((p) => p.y), borderColor: css("--muted"), borderDash: [6, 4], pointRadius: 0 },
+      { label: "Today", data: curve().map((p) => p.y), borderColor: css("--c1"), borderWidth: 2.4, pointRadius: 3, pointBackgroundColor: css("--c1") },
+    ] },
+    options: (() => { const o = baseOptions({ timeAxis: false, yTitle: "Yield (%)" }); o.interaction = { mode: "index", intersect: false }; o.plugins.decimation.enabled = false; return o; })(),
+  });
+
+  // change table
+  const horizons = [["1 day", { days: -1 }], ["1 week", { days: -7 }], ["1 month", { months: -1 }], ["3 months", { months: -3 }], ["Year to date", null], ["1 year", { years: -1 }]];
+  const ytd = (+ASOF.slice(0, 4) - 1) + "-12-31";
+  let html = `<thead><tr><th></th><th>Latest</th>${horizons.map((h) => `<th>${h[0]}</th>`).join("")}</tr></thead><tbody>`;
+  TENORS.forEach((t) => {
+    const l = last(t.id);
+    const prevDay = series(t.id).values.at(-2);
+    html += `<tr><td>${t.label}</td><td>${fmtPct(l.value)}</td>` + horizons.map(([name, off]) => {
+      const ref = name === "1 day" ? prevDay : at(t.id, off ? shiftDate(l.date, off) : ytd);
+      const v = (l.value - ref) * 100; return `<td class="${cls(v)}">${sbp(v)}</td>`;
+    }).join("") + "</tr>";
+  });
+  document.getElementById("changeTable").innerHTML = html + "</tbody>";
+}
+
+// ---------- yields ----------
+const yieldState = { tenors: new Set(["DGS3MO", "DGS2", "DGS10", "DGS30"]), years: 5 };
+function renderYields() {
+  const from = rangeStart(yieldState.years), palette = ["--c1", "--c2", "--c3", "--c4", "--c5"];
+  const chosen = TENORS.filter((t) => yieldState.tenors.has(t.id));
+  draw("yields", "yieldChart", {
+    type: "line",
+    data: { datasets: chosen.map((t, i) => ({ label: t.label, data: points(t.id, from), borderColor: css(palette[i % palette.length]) })) },
+    options: baseOptions({ yTitle: "Yield (%)" }),
+  });
+  const from1 = rangeStart(yieldState.years);
+  const rows = chosen.map((t) => {
+    const p = points(t.id, from1).map((q) => q.y); const hi = Math.max(...p), lo = Math.min(...p);
+    return `${t.label}: ${fmtPct(lo)} to ${fmtPct(hi)}`;
+  });
+  document.getElementById("yieldText").innerHTML = `<p><b>Range over the selected window.</b> ${rows.join(" · ")}. Today the curve runs from ${fmtPct(last("DGS3MO").value)} at 3 months to ${fmtPct(last("DGS30").value)} at 30 years.</p>`;
+}
+function initYields() {
+  const chips = document.getElementById("tenorChips");
+  chips.innerHTML = TENORS.map((t) => `<span class="chip ${yieldState.tenors.has(t.id) ? "on" : ""}" data-id="${t.id}">${t.label}</span>`).join("");
+  chips.addEventListener("click", (e) => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    const id = c.dataset.id;
+    if (yieldState.tenors.has(id)) { if (yieldState.tenors.size > 1) yieldState.tenors.delete(id); } else if (yieldState.tenors.size < 5) yieldState.tenors.add(id);
+    c.classList.toggle("on", yieldState.tenors.has(id)); renderYields();
+  });
+  makeSeg("yieldRange", 5, (y) => { yieldState.years = y; renderYields(); });
+}
+
+// ---------- spreads ----------
+let spreadYears = 10;
+function renderSpreads() {
+  const from = rangeStart(spreadYears), bp = (v) => v * 100;
+  const zero = { label: "Zero (inverted below)", data: [{ x: ts(from < series("T10Y2Y").dates[0] ? series("T10Y2Y").dates[0] : from), y: 0 }, { x: ts(ASOF), y: 0 }], borderColor: css("--muted"), borderDash: [4, 4], borderWidth: 1 };
+  draw("term", "termChart", {
+    type: "line",
+    data: { datasets: [
+      { label: "10 yr minus 2 yr", data: points("T10Y2Y", from, bp), borderColor: css("--c1") },
+      { label: "10 yr minus 3 mo", data: points("T10Y3M", from, bp), borderColor: css("--c3") },
+      zero,
+    ] },
+    options: baseOptions({ yFmt: (v) => v + "" }),
+  });
+  draw("credit", "creditChart", {
+    type: "line",
+    data: { datasets: [
+      { label: "Investment grade", data: points("BAMLC0A0CM", "1900-01-01", bp), borderColor: css("--c2") },
+      { label: "High yield", data: points("BAMLH0A0HYM2", "1900-01-01", bp), borderColor: css("--c3") },
+    ] },
+    options: baseOptions(),
+  });
+  // inversion streak stats
+  const s = series("T10Y2Y"); let lastInv = null;
+  for (let i = s.values.length - 1; i >= 0; i--) if (s.values[i] < 0) { lastInv = s.dates[i]; break; }
+  const t2 = last("T10Y2Y").value * 100, t3 = last("T10Y3M").value * 100;
+  const ig = last("BAMLC0A0CM").value * 100, hy = last("BAMLH0A0HYM2").value * 100;
+  const hyS = series("BAMLH0A0HYM2").values, hyPct = hyS.filter((v) => v * 100 < hy).length / hyS.length * 100;
+  document.getElementById("spreadText").innerHTML =
+    `<p><b>Curve slope.</b> The 10 yr minus 2 yr spread is ${fmtBp(t2)} and the 10 yr minus 3 mo spread is ${fmtBp(t3)}. ${t2 >= 0 ? `The curve is no longer inverted; the last inverted day on the 10s–2s measure was ${lastInv ? fmtDate(lastInv) : "before 2000"}.` : "The curve is inverted, which historically has been a recession warning."}</p>
+     <p><b>Credit.</b> Investment-grade bonds pay ${Math.round(ig)} bp over Treasuries and high-yield bonds ${Math.round(hy)} bp. The high-yield spread is tighter than on ${Math.round(100 - hyPct)}% of days in the last three years, a sign that investors are ${hyPct < 40 ? "comfortable taking credit risk" : "demanding more pay for credit risk"}.</p>`;
+}
+
+// ---------- inflation ----------
+let inflYears = 10;
+function renderInflation() {
+  const head = yoy("CPIAUCSL"), core = yoy("CPILFESL");
+  const h = head.at(-1), c = core.at(-1), be10 = last("T10YIE").value, be5 = last("T5YIE").value, real = last("DGS10").value - be10;
+  const kpi = (l, v, sub) => `<div class="kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="chg">${sub}</div></div>`;
+  const mon = (d) => new Date(ts(d)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  document.getElementById("inflKpis").innerHTML =
+    kpi("CPI inflation", fmtPct(h.value, 1), mon(h.date)) +
+    kpi("Core CPI inflation", fmtPct(c.value, 1), mon(c.date)) +
+    kpi("5 yr breakeven", fmtPct(be5), "market's 5 yr forecast") +
+    kpi("10 yr breakeven", fmtPct(be10), "market's 10 yr forecast") +
+    kpi("Real 10 yr yield", fmtPct(real), "10 yr minus breakeven");
+  const from = rangeStart(inflYears);
+  const toPts = (arr) => arr.filter((o) => o.date >= from).map((o) => ({ x: ts(o.date), y: o.value }));
+  draw("cpi", "cpiChart", {
+    type: "line",
+    data: { datasets: [
+      { label: "Headline CPI", data: toPts(head), borderColor: css("--c1") },
+      { label: "Core CPI", data: toPts(core), borderColor: css("--c3") },
+      { label: "Fed target (2%)", data: [{ x: ts(from < head[0].date ? head[0].date : from), y: 2 }, { x: ts(h.date), y: 2 }], borderColor: css("--muted"), borderDash: [4, 4], borderWidth: 1 },
+    ] },
+    options: baseOptions({ yFmt: (v) => v + "%" }),
+  });
+  const s10 = series("DGS10"), real10 = series("T10YIE").dates.filter((d) => d >= from).map((d, i) => {
+    const b = at("T10YIE", d), n = at("DGS10", d); return { x: ts(d), y: n - b };
+  });
+  draw("be", "beChart", {
+    type: "line",
+    data: { datasets: [
+      { label: "10 yr breakeven", data: points("T10YIE", from), borderColor: css("--c2") },
+      { label: "5 yr breakeven", data: points("T5YIE", from), borderColor: css("--c4") },
+      { label: "Real 10 yr yield", data: real10, borderColor: css("--c3") },
+    ] },
+    options: baseOptions({ yFmt: (v) => v + "%" }),
+  });
+  document.getElementById("inflText").innerHTML =
+    `<p><b>In plain words.</b> Prices rose ${fmtPct(h.value, 1)} over the past year (${fmtPct(c.value, 1)} excluding food and energy), ${h.value > 2.5 ? "still above" : h.value < 1.5 ? "below" : "close to"} the Fed's 2% goal. Bond investors expect about ${fmtPct(be10)} a year over the next decade. After subtracting that, a 10-year Treasury pays a real return of ${fmtPct(real)} a year${real > 2 ? ", high by post-2008 standards" : ""}.</p>`;
+}
+
+// ---------- scenarios ----------
+const SCENARIOS = [
+  { name: "Parallel +100 bp", s: 100, l: 100 },
+  { name: "Parallel −100 bp", s: -100, l: -100 },
+  { name: "Bear steepener", s: 25, l: 100 },
+  { name: "Bull steepener", s: -100, l: -25 },
+  { name: "Bear flattener", s: 100, l: 25 },
+  { name: "Bull flattener", s: -25, l: -100 },
+  { name: "Custom", custom: true },
+];
+let scenIdx = 0;
+// shift interpolated in log-maturity between 3 mo and 30 yr
+const shiftFor = (years, s, l) => s + (l - s) * (Math.log(years / 0.25) / Math.log(30 / 0.25));
+// price of a bond paying coupon c (%) semiannually, at yield y (%)
+function price(c, y, T) {
+  if (T <= 0.5) return 100 / Math.pow(1 + y / 100 / 2, 2 * T) * (1 + c / 100 * T) ; // single payment
+  const n = Math.round(T * 2), r = y / 100 / 2, cp = c / 2;
+  let p = 0; for (let k = 1; k <= n; k++) p += cp / Math.pow(1 + r, k);
+  return p + 100 / Math.pow(1 + r, n);
+}
+function renderScenarios() {
+  const sc = SCENARIOS[scenIdx];
+  const s = sc.custom ? +document.getElementById("shortShift").value : sc.s;
+  const l = sc.custom ? +document.getElementById("longShift").value : sc.l;
+  document.getElementById("customCtl").style.display = sc.custom ? "flex" : "none";
+  document.getElementById("shortLab").textContent = fmtBp(+document.getElementById("shortShift").value);
+  document.getElementById("longLab").textContent = fmtBp(+document.getElementById("longShift").value);
+  const rows = TENORS.map((t) => {
+    const y0 = last(t.id).value, dy = shiftFor(t.years, s, l), y1 = y0 + dy / 100;
+    const p0 = price(y0, y0, t.years), p1 = price(y0, y1, t.years);
+    const chg = (p1 / p0 - 1) * 100;
+    return { t, y0, y1, dy, chg, ret12: chg + y0 };
+  });
+  draw("scen", "scenChart", {
+    type: "line",
+    data: { labels: TENORS.map((t) => t.label), datasets: [
+      { label: "Today", data: rows.map((r) => r.y0), borderColor: css("--c1"), borderWidth: 2.2, pointRadius: 3, pointBackgroundColor: css("--c1") },
+      { label: sc.name, data: rows.map((r) => r.y1), borderColor: css("--c3"), borderWidth: 2.2, borderDash: [6, 4], pointRadius: 3, pointBackgroundColor: css("--c3") },
+    ] },
+    options: (() => { const o = baseOptions({ timeAxis: false, yTitle: "Yield (%)" }); o.interaction = { mode: "index", intersect: false }; o.plugins.decimation.enabled = false; return o; })(),
+  });
+  document.getElementById("scenTable").innerHTML =
+    `<thead><tr><th>Maturity</th><th>Yield now</th><th>Shift</th><th>New yield</th><th>Price change</th><th>1 yr return*</th></tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${r.t.label}</td><td>${fmtPct(r.y0)}</td><td class="${cls(r.dy)}">${sbp(r.dy)}</td><td>${fmtPct(r.y1)}</td><td class="${r.chg < -0.005 ? "up" : r.chg > 0.005 ? "down" : ""}">${(r.chg >= 0 ? "+" : "−") + Math.abs(r.chg).toFixed(2)}%</td><td>${(r.ret12 >= 0 ? "+" : "−") + Math.abs(r.ret12).toFixed(2)}%</td></tr>`).join("") +
+    `</tbody>`;
+  const worst = rows.reduce((a, b) => (b.chg < a.chg ? b : a)), best = rows.reduce((a, b) => (b.chg > a.chg ? b : a));
+  const r10 = rows.find((r) => r.t.id === "DGS10");
+  document.getElementById("scenText").innerHTML =
+    `<p><b>In plain words.</b> Under a <b>${sc.name.toLowerCase()}</b> (${fmtBp(s)} at 3 months, ${fmtBp(l)} at 30 years), a 10-year Treasury bought at par today would ${r10.chg < 0 ? "lose" : "gain"} ${Math.abs(r10.chg).toFixed(1)}% of its price immediately. The ${best.t.label} does best (${best.chg >= 0 ? "+" : "−"}${Math.abs(best.chg).toFixed(1)}%) and the ${worst.t.label} does worst (${worst.chg >= 0 ? "+" : "−"}${Math.abs(worst.chg).toFixed(1)}%), because longer bonds have higher <em>duration</em>: their price reacts more to each basis point.</p>
+     <p class="note">*1 yr return adds one year of coupon income to the instant price change, assuming the shock happens today and yields then stay put.</p>`;
+}
+function initScenarios() {
+  const chips = document.getElementById("scenChips");
+  chips.innerHTML = SCENARIOS.map((sc, i) => `<span class="chip ${i === scenIdx ? "on" : ""}" data-i="${i}">${sc.name}</span>`).join("");
+  chips.addEventListener("click", (e) => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    scenIdx = +c.dataset.i; chips.querySelectorAll(".chip").forEach((x) => x.classList.toggle("on", x === c)); renderScenarios();
+  });
+  ["shortShift", "longShift"].forEach((id) => document.getElementById(id).addEventListener("input", renderScenarios));
+}
+
+// ---------- monte carlo ----------
+// standard normal via Box–Muller
+function randn() { let u = 0; while (u === 0) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
+function calibrate(id, years) {
+  const s = series(id), from = shiftDate(ASOF, { years: -years });
+  const y = s.values.filter((_, i) => s.dates[i] >= from);
+  const x = y.slice(0, -1), z = y.slice(1), n = x.length;
+  const mx = x.reduce((a, b) => a + b, 0) / n, mz = z.reduce((a, b) => a + b, 0) / n;
+  let sxx = 0, sxz = 0; for (let i = 0; i < n; i++) { sxx += (x[i] - mx) ** 2; sxz += (x[i] - mx) * (z[i] - mz); }
+  const beta = sxz / sxx, alpha = mz - beta * mx;
+  let ssr = 0, sdd = 0;
+  for (let i = 0; i < n; i++) { ssr += (z[i] - alpha - beta * x[i]) ** 2; sdd += (z[i] - x[i]) ** 2; }
+  return {
+    n, beta, alpha,
+    sigmaAR: Math.sqrt(ssr / (n - 2)),
+    sigmaRW: Math.sqrt(sdd / (n - 1)),
+    longRun: beta < 1 ? alpha / (1 - beta) : NaN,
+    halfLifeYears: beta < 1 && beta > 0 ? Math.log(0.5) / Math.log(beta) / 252 : Infinity,
+  };
+}
+function renderMC() {
+  const id = document.getElementById("mcTenor").value, tenor = TENORS.find((t) => t.id === id);
+  const months = +document.getElementById("mcHorizon").value, lookback = +document.getElementById("mcLookback").value;
+  let model = document.getElementById("mcModel").value;
+  const nPaths = +document.getElementById("mcPaths").value;
+  document.getElementById("mcHorizonLab").textContent = months + (months === 1 ? " month" : " months");
+  const cal = calibrate(id, lookback);
+  const meanRevertOK = cal.beta < 1 && cal.beta > 0;
+  if (model === "vasicek" && !meanRevertOK) model = "rw";
+  const steps = Math.round(months * 21), y0 = last(id).value;
+  const pctl = [0.05, 0.25, 0.5, 0.75, 0.95];
+  const bands = pctl.map(() => new Float64Array(steps + 1));
+  const cols = Array.from({ length: steps + 1 }, () => new Float64Array(nPaths));
+  const samples = [];
+  for (let p = 0; p < nPaths; p++) {
+    let y = y0; cols[0][p] = y; const keep = p < 5 ? [y] : null;
+    for (let k = 1; k <= steps; k++) {
+      y = model === "vasicek" ? cal.alpha + cal.beta * y + cal.sigmaAR * randn() : y + cal.sigmaRW * randn();
+      cols[k][p] = y; if (keep) keep.push(y);
+    }
+    if (keep) samples.push(keep);
+  }
+  for (let k = 0; k <= steps; k++) { const c = Array.from(cols[k]).sort((a, b) => a - b); pctl.forEach((q, j) => (bands[j][k] = quantile(c, q))); }
+  const ends = Array.from(cols[steps]).sort((a, b) => a - b);
+  const med = quantile(ends, 0.5), p5 = quantile(ends, 0.05), p95 = quantile(ends, 0.95);
+  const higher = ends.filter((v) => v > y0).length / nPaths * 100;
+
+  const kpi = (l, v) => `<div class="kpi"><div class="lab">${l}</div><div class="val">${v}</div></div>`;
+  document.getElementById("mcKpis").innerHTML =
+    kpi("Today", fmtPct(y0)) + kpi(`Median in ${months} month${months === 1 ? "" : "s"}`, fmtPct(med)) +
+    kpi("90% of paths end between", `${fmtPct(p5)} and ${fmtPct(p95)}`) + kpi("Chance yield ends higher", Math.round(higher) + "%");
+  document.getElementById("mcText").innerHTML =
+    `<p><b>In plain words.</b> Starting from ${fmtPct(y0)}, the middle path puts the ${tenor.label} yield at ${fmtPct(med)} in ${months} month${months === 1 ? "" : "s"}. Nine times out of ten it ends between ${fmtPct(p5)} and ${fmtPct(p95)}, a range of ${Math.round((p95 - p5) * 100)} bp. That width is the main lesson: the uncertainty is much larger than the expected move.</p>`;
+
+  // fan chart
+  const start = ts(ASOF), xAt = (k) => start + (k / 21) * 30.44 * DAY;
+  const band = (j) => Array.from(bands[j], (v, k) => ({ x: xAt(k), y: v }));
+  const histFrom = shiftDate(ASOF, { months: -Math.max(6, months) });
+  const o = baseOptions({ yTitle: "Yield (%)", yFmt: (v) => v.toFixed(1) });
+  o.plugins.legend.labels.filter = (item) => !item.text.startsWith("_");
+  o.plugins.tooltip.filter = (item) => !item.dataset.label.startsWith("_");
+  draw("fan", "fanChart", {
+    type: "line",
+    data: { datasets: [
+      { label: "History", data: points(id, histFrom), borderColor: css("--c1"), borderWidth: 1.8 },
+      { label: "_p5", data: band(0), borderColor: "transparent", pointRadius: 0 },
+      { label: "90% of paths", data: band(4), borderColor: "transparent", backgroundColor: css("--band1"), fill: "-1" },
+      { label: "_p25", data: band(1), borderColor: "transparent" },
+      { label: "50% of paths", data: band(3), borderColor: "transparent", backgroundColor: css("--band2"), fill: "-1" },
+      { label: "Median", data: band(2), borderColor: css("--c2"), borderWidth: 2 },
+      ...samples.map((sp, i) => ({ label: "_path" + i, data: sp.map((v, k) => ({ x: xAt(k), y: v })), borderColor: css("--muted"), borderWidth: 0.7 })),
+    ] },
+    options: o,
+  });
+
+  // histogram of ending yields
+  const lo = ends[0], hi = ends.at(-1), nb = 40, w = (hi - lo) / nb || 0.01;
+  const counts = new Array(nb).fill(0); ends.forEach((v) => counts[Math.min(nb - 1, Math.floor((v - lo) / w))]++);
+  const ho = baseOptions({ timeAxis: false, yFmt: (v) => v + "%" });
+  ho.plugins.legend.display = false; ho.plugins.decimation.enabled = false;
+  ho.scales.x.ticks.maxTicksLimit = 8;
+  ho.plugins.tooltip.callbacks = { title: (it) => `Ending yield ≈ ${it[0].label}%`, label: (it) => `${it.parsed.y.toFixed(1)}% of paths` };
+  draw("hist", "histChart", {
+    type: "bar",
+    data: { labels: counts.map((_, i) => (lo + (i + 0.5) * w).toFixed(2)),
+      datasets: [{ data: counts.map((c) => c / nPaths * 100), backgroundColor: counts.map((_, i) => (lo + (i + 0.5) * w) > y0 ? css("--up") : css("--c2")), barPercentage: 1, categoryPercentage: 1 }] },
+    options: ho,
+  });
+
+  // probabilities of scenario-sized moves
+  const prob = (f) => (ends.filter(f).length / nPaths * 100).toFixed(1) + "%";
+  document.getElementById("mcProbTable").innerHTML =
+    `<thead><tr><th>Move in the ${tenor.label} yield by ${months} mo</th><th>Probability</th></tr></thead><tbody>` +
+    [[100, "Up 100 bp or more (parallel +100)"], [50, "Up 50 bp or more"], [-50, "Down 50 bp or more"], [-100, "Down 100 bp or more (parallel −100)"]]
+      .map(([b, l]) => `<tr><td>${l}</td><td>${prob(b > 0 ? (v) => v - y0 >= b / 100 : (v) => v - y0 <= b / 100)}</td></tr>`).join("") + "</tbody>";
+
+  const dailyBp = (model === "vasicek" ? cal.sigmaAR : cal.sigmaRW) * 100;
+  document.getElementById("mcParams").innerHTML =
+    `<p><b>What the model learned</b> from ${cal.n.toLocaleString()} trading days over the last ${lookback} year${lookback === 1 ? "" : "s"}: a typical daily move of ${dailyBp.toFixed(1)} bp` +
+    (model === "vasicek"
+      ? `, a long-run level of ${fmtPct(cal.longRun)}, and a half-life of ${cal.halfLifeYears.toFixed(1)} years (the time for half of any gap from that level to close). The median drifts ${med < y0 ? "down" : "up"} because today's yield is ${y0 > cal.longRun ? "above" : "below"} that long-run level.`
+      : `. A random walk has no pull toward any level, so the median stays near today's yield and only the spread widens.`) +
+    (document.getElementById("mcModel").value === "vasicek" && !meanRevertOK ? " (No mean reversion was found in this window, so the random walk is used.)" : "") + `</p>`;
+}
+function initMC() {
+  const sel = document.getElementById("mcTenor");
+  sel.innerHTML = TENORS.map((t) => `<option value="${t.id}" ${t.id === "DGS10" ? "selected" : ""}>${t.label}</option>`).join("");
+  ["mcTenor", "mcHorizon", "mcModel", "mcLookback", "mcPaths"].forEach((id) => document.getElementById(id).addEventListener(id === "mcHorizon" ? "change" : "change", renderMC));
+  document.getElementById("mcHorizon").addEventListener("input", () => {
+    const m = +document.getElementById("mcHorizon").value; document.getElementById("mcHorizonLab").textContent = m + (m === 1 ? " month" : " months");
+  });
+  document.getElementById("mcRun").addEventListener("click", renderMC);
+}
+
+// ---------- tabs & boot ----------
+const renderers = { overview: renderOverview, yields: renderYields, spreads: renderSpreads, inflation: renderInflation, scenarios: renderScenarios, montecarlo: renderMC };
+const rendered = new Set();
+function showTab(name) {
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  document.querySelectorAll("section.panel").forEach((p) => p.classList.toggle("active", p.id === name));
+  if (!rendered.has(name)) { renderers[name](); rendered.add(name); }
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+}
+document.querySelector("nav.tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+document.getElementById("explainToggle").addEventListener("change", (e) => document.body.classList.toggle("no-explain", !e.target.checked));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { const cur = document.querySelector("section.panel.active").id; rendered.clear(); showTab(cur); });
+
+fetch("data.json", { cache: "no-cache" })
+  .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  .then((json) => {
+    D = json; ASOF = D.asOf;
+    document.getElementById("loading").remove();
+    document.getElementById("asof").textContent = `Data through ${fmtDate(ASOF)}. Source: U.S. Treasury, BLS and ICE via FRED.`;
+    document.getElementById("updated").textContent = `Last refreshed ${D.updated}.`;
+    initYields(); makeSeg("spreadRange", 10, (y) => { spreadYears = y; renderSpreads(); });
+    makeSeg("inflRange", 10, (y) => { inflYears = y; renderInflation(); });
+    initScenarios(); initMC();
+    const start = location.hash.slice(1);
+    showTab(renderers[start] ? start : "overview");
+  })
+  .catch((err) => { document.getElementById("loading").textContent = "Could not load data.json (" + err.message + "). If you opened this file directly, serve it over http instead."; });
+</script>
+</body>
+</html>
