@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Term Premium Monitor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: single reading column, two stacked chart panels, a window calculator, a findings block */
+:root{
+  --bg:#f5f6f4; --panel:#ffffff; --fg:#1b2420; --muted:#5d6a64; --line:#d9dfdb;
+  --tp:#b4471f; --dur:#1f5f7a; --spx:#3f6e2f; --band:rgba(180,71,31,.10);
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121715;--panel:#1a211e;--fg:#e4ebe7;--muted:#9aa8a1;--line:#2c3631;--tp:#f08a5d;--dur:#6fb3d2;--spx:#8cc472;--band:rgba(240,138,93,.14);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121715;--panel:#1a211e;--fg:#e4ebe7;--muted:#9aa8a1;--line:#2c3631;--tp:#f08a5d;--dur:#6fb3d2;--spx:#8cc472;--band:rgba(240,138,93,.14);color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1040px;margin:0 auto;padding-block:32px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:24px}
+h1{font-family:var(--display);font-size:clamp(28px,4vw,40px);line-height:1.1;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0}
+.lede{color:var(--muted);max-width:68ch;margin:6px 0 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;display:grid;gap:10px;min-width:0}
+.key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted)}
+.key i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:6px}
+.chart{position:relative;height:340px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.calc{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:grid;gap:4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+select{font:inherit;font-family:var(--mono);padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
+select:focus-visible{outline:2px solid var(--dur);outline-offset:1px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;font-family:var(--body)}
+th{font-weight:500;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.tbl{overflow-x:auto}
+.claim{border-left:3px solid var(--tp);padding:4px 0 4px 14px;max-width:72ch;margin:0}
+.claim b{font-family:var(--mono);font-weight:500}
+a{color:var(--dur)}
+@media (max-width:520px){.chart{height:280px}}
+*{box-sizing:border-box}body{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Term Premium Monitor</h1>
+    <p class="lede">The ACM 10-year term premium plotted against the modified duration of a 10-year par Treasury, monthly from July 2007 to October 2026, with a window calculator that ties term-premium moves to the S&amp;P 500.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Duration and term premium</h2>
+    <div class="key"><span><i style="background:var(--tp)"></i>10y term premium, % (left)</span><span><i style="background:var(--dur)"></i>Modified duration, years (right)</span></div>
+    <div class="chart"><canvas id="c1" aria-label="Term premium and modified duration chart"></canvas></div>
+    <p class="note">Modified duration of a 10-year Treasury priced at par with semiannual coupons: D<sub>mod</sub> = (1 − (1 + y/2)<sup>−20</sup>) / y, where y is the 10-year constant-maturity yield. Duration falls as yields rise.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Term premium and the S&amp;P 500</h2>
+    <div class="key"><span><i style="background:var(--tp)"></i>10y term premium, % (left)</span><span><i style="background:var(--spx)"></i>S&amp;P 500, month-end (right)</span><span><i style="background:var(--band);height:10px"></i>Selected window</span></div>
+    <div class="chart"><canvas id="c2" aria-label="Term premium and S&amp;P 500 chart"></canvas></div>
+  </section>
+
+  <section class="panel">
+    <h2>Window calculator</h2>
+    <div class="calc">
+      <label for="from">From month-end<select id="from"></select></label>
+      <label for="to">To month-end<select id="to"></select></label>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Series</th><th>Start</th><th>End</th><th>Change</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table></div>
+    <p class="note" id="corr"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Finding</h2>
+    <p class="claim" id="claim"></p>
+  </section>
+
+  <p class="note">Sources: FRED, Federal Reserve Bank of St. Louis: <a href="https://fred.stlouisfed.org/series/THREEFYTP10" target="_blank" rel="noopener">THREEFYTP10</a> (Adrian–Crump–Moench term premium, month-end), <a href="https://fred.stlouisfed.org/series/GS10" target="_blank" rel="noopener">GS10</a> (10-year yield, monthly average), <a href="https://fred.stlouisfed.org/series/SP500" target="_blank" rel="noopener">SP500</a> (month-end close). Months with no month-end term-premium print are left as gaps.</p>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const ROWS=[["2007-07",0.6747,5.0,null],["2007-08",0.7131,4.67,null],["2007-09",0.773,4.52,null],["2007-10",0.6847,4.53,null],["2007-11",0.5911,4.15,null],["2007-12",0.5981,4.1,null],["2008-01",0.6225,3.74,null],["2008-02",0.6181,3.74,null],["2008-03",0.6515,3.51,null],["2008-04",0.8545,3.68,null],["2008-05",0.9559,3.88,null],["2008-06",0.8904,4.1,null],["2008-07",0.9109,4.01,null],["2008-08",0.7875,3.89,null],["2008-09",0.9242,3.69,null],["2008-10",1.2185,3.81,null],["2008-11",0.7475,3.53,null],["2008-12",0.393,2.42,null],["2009-01",0.719,2.52,null],["2009-02",0.7636,2.87,null],["2009-03",0.5283,2.82,null],["2009-04",0.78,2.93,null],["2009-05",0.9989,3.29,null],["2009-06",1.0322,3.72,null],["2009-07",1.049,3.56,null],["2009-08",0.9688,3.59,null],["2009-09",0.9012,3.4,null],["2009-10",0.9519,3.39,null],["2009-11",0.7964,3.4,null],["2009-12",1.1347,3.59,null],["2010-01",1.0065,3.73,null],["2010-02",0.9873,3.69,null],["2010-03",1.0908,3.73,null],["2010-04",1.0051,3.85,null],["2010-05",0.807,3.42,null],["2010-06",0.6169,3.2,null],["2010-07",0.5591,3.01,null],["2010-08",0.323,2.7,null],["2010-09",0.3129,2.65,null],["2010-10",0.3436,2.54,null],["2010-11",0.4543,2.76,null],["2010-12",0.7701,3.29,null],["2011-01",0.7729,3.39,null],["2011-02",0.8288,3.58,null],["2011-03",0.8735,3.41,null],["2011-04",0.7799,3.46,null],["2011-05",0.6062,3.17,null],["2011-06",0.6537,3.0,null],["2011-07",0.458,3.0,null],["2011-08",0.1409,2.3,null],["2011-09",0.043,1.98,null],["2011-10",0.1603,2.15,null],["2011-11",0.0693,2.01,null],["2011-12",-0.004,1.98,null],["2012-01",-0.0661,1.97,null],["2012-02",-0.0064,1.97,null],["2012-03",0.1337,2.17,null],["2012-04",-0.0204,2.05,null],["2012-05",-0.179,1.8,null],["2012-06",-0.1621,1.62,null],["2012-07",-0.2371,1.53,null],["2012-08",-0.2029,1.68,null],["2012-09",-0.1891,1.72,null],["2012-10",-0.1357,1.75,null],["2012-11",-0.1971,1.65,null],["2012-12",-0.1174,1.72,null],["2013-01",0.0066,1.91,null],["2013-02",-0.0646,1.98,null],["2013-03",null,1.96,null],["2013-04",-0.1508,1.76,null],["2013-05",0.104,1.93,null],["2013-06",0.3272,2.3,null],["2013-07",0.367,2.58,null],["2013-08",0.492,2.74,null],["2013-09",0.3935,2.81,null],["2013-10",0.3334,2.62,null],["2013-11",0.4156,2.72,null],["2013-12",0.5992,2.9,null],["2014-01",0.4404,2.86,null],["2014-02",0.4227,2.71,null],["2014-03",0.4991,2.72,null],["2014-04",0.4801,2.71,null],["2014-05",0.361,2.56,null],["2014-06",0.4043,2.6,null],["2014-07",0.4476,2.54,null],["2014-08",0.3473,2.42,null],["2014-09",0.4476,2.53,null],["2014-10",0.347,2.3,null],["2014-11",0.271,2.33,null],["2014-12",0.2808,2.21,null],["2015-01",0.0276,1.88,null],["2015-02",0.1994,1.98,null],["2015-03",0.132,2.04,null],["2015-04",0.1857,1.94,null],["2015-05",0.2382,2.2,null],["2015-06",0.3468,2.36,null],["2015-07",0.2605,2.32,null],["2015-08",0.2484,2.17,null],["2015-09",0.1762,2.17,null],["2015-10",0.224,2.07,null],["2015-11",0.2441,2.26,null],["2015-12",0.2776,2.24,null],["2016-01",0.0528,2.09,null],["2016-02",-0.0465,1.78,null],["2016-03",-0.0181,1.89,null],["2016-04",0.0066,1.81,null],["2016-05",0.01,1.81,null],["2016-06",-0.1822,1.64,null],["2016-07",-0.1857,1.5,null],["2016-08",-0.1271,1.56,null],["2016-09",-0.1248,1.63,null],["2016-10",-0.0099,1.76,null],["2016-11",0.2725,2.14,2198.81],["2016-12",0.3322,2.49,2238.83],["2017-01",0.317,2.43,2278.87],["2017-02",0.2697,2.42,2363.64],["2017-03",0.2325,2.48,2362.72],["2017-04",0.1504,2.3,2384.2],["2017-05",0.0803,2.3,2411.8],["2017-06",0.1051,2.19,2423.41],["2017-07",0.097,2.32,2470.3],["2017-08",0.0187,2.21,2471.65],["2017-09",0.1117,2.2,2519.36],["2017-10",0.1347,2.36,2575.26],["2017-11",0.129,2.35,2647.58],["2017-12",0.1233,2.4,2673.61],["2018-01",0.2742,2.58,2823.81],["2018-02",0.321,2.86,2713.83],["2018-03",null,2.84,2640.87],["2018-04",0.3293,2.87,2648.05],["2018-05",0.2481,2.98,2705.27],["2018-06",0.2603,2.91,2718.37],["2018-07",0.2979,2.89,2816.29],["2018-08",0.2206,2.89,2901.52],["2018-09",0.3096,3.0,2913.98],["2018-10",0.316,3.15,2711.74],["2018-11",0.238,3.12,2760.17],["2018-12",0.0497,2.83,2506.85],["2019-01",0.0182,2.71,2704.1],["2019-02",0.052,2.68,2784.49],["2019-03",-0.105,2.57,2834.4],["2019-04",-0.0546,2.53,2945.83],["2019-05",-0.2298,2.4,2752.06],["2019-06",-0.268,2.07,2941.76],["2019-07",-0.2398,2.06,2980.38],["2019-08",-0.4838,1.63,2926.46],["2019-09",-0.3677,1.7,2976.74],["2019-10",-0.2973,1.71,3037.56],["2019-11",-0.2569,1.81,3140.98],["2019-12",-0.1876,1.86,3230.78],["2020-01",-0.3998,1.76,3225.52],["2020-02",-0.5573,1.5,2954.22],["2020-03",-0.5203,0.87,2584.59],["2020-04",-0.5691,0.66,2912.43],["2020-05",-0.5904,0.67,3044.31],["2020-06",-0.6055,0.73,3100.29],["2020-07",-0.6471,0.62,3271.12],["2020-08",-0.5781,0.65,3500.31],["2020-09",-0.6068,0.68,3363.0],["2020-10",-0.5045,0.79,3269.96],["2020-11",-0.5084,0.87,3621.63],["2020-12",-0.4849,0.93,3756.07],["2021-01",-0.4041,1.08,3714.24],["2021-02",-0.1807,1.26,3811.15],["2021-03",-0.0374,1.61,3972.89],["2021-04",-0.0826,1.64,4181.17],["2021-05",-0.1156,1.62,4204.11],["2021-06",-0.1466,1.52,4297.5],["2021-07",-0.268,1.32,4395.26],["2021-08",-0.2339,1.28,4522.68],["2021-09",-0.1031,1.37,4307.54],["2021-10",-0.0441,1.58,4605.38],["2021-11",-0.0822,1.56,4567.0],["2021-12",-0.0588,1.47,4766.18],["2022-01",0.0721,1.76,4515.55],["2022-02",0.0768,1.93,4373.94],["2022-03",0.32,2.13,4530.41],["2022-04",0.534,2.75,4131.93],["2022-05",0.4417,2.9,4132.15],["2022-06",0.389,3.14,3785.38],["2022-07",0.0544,2.9,4130.29],["2022-08",0.2419,2.9,3955.0],["2022-09",0.5169,3.52,3585.62],["2022-10",0.5055,3.98,3871.98],["2022-11",0.1996,3.89,4080.11],["2022-12",0.2801,3.62,3839.5],["2023-01",0.0255,3.53,4076.6],["2023-02",0.258,3.75,3970.15],["2023-03",0.0305,3.66,4109.31],["2023-04",-0.0635,3.46,4169.48],["2023-05",-0.0186,3.57,4179.83],["2023-06",0.1019,3.75,4450.38],["2023-07",0.1462,3.9,4588.96],["2023-08",0.2064,4.17,4507.66],["2023-09",0.47,4.38,4288.05],["2023-10",0.6231,4.8,4193.8],["2023-11",0.3449,4.5,4567.8],["2023-12",0.0917,4.02,4769.83],["2024-01",0.1709,4.06,4845.65],["2024-02",0.3095,4.21,5096.27],["2024-03",null,4.21,5254.35],["2024-04",0.5251,4.54,5035.69],["2024-05",0.4418,4.48,5277.51],["2024-06",0.3312,4.31,5460.48],["2024-07",0.2197,4.25,5522.3],["2024-08",0.148,3.87,5648.4],["2024-09",0.1945,3.72,5762.48],["2024-10",0.489,4.1,5705.45],["2024-11",0.4489,4.36,6032.38],["2024-12",0.6872,4.39,5881.63],["2025-01",0.6836,4.63,6040.53],["2025-02",0.5063,4.45,5954.5],["2025-03",0.4988,4.28,5611.85],["2025-04",0.435,4.28,5569.06],["2025-05",0.5515,4.42,5911.69],["2025-06",0.4603,4.38,6204.95],["2025-07",0.5262,4.39,6339.39],["2025-08",0.4727,4.26,6460.26],["2025-09",0.5031,4.12,6688.46],["2025-10",0.4975,4.06,6840.2],["2025-11",0.4507,4.09,6849.09],["2025-12",0.571,4.14,6845.5],["2026-01",0.6148,4.21,6939.03],["2026-02",0.4627,4.13,6878.88],["2026-03",0.654,4.25,6528.52],["2026-04",0.7038,4.32,7209.01],["2026-05",0.7541,4.48,7580.06],["2026-06",0.6967,4.47,7499.36],["2026-07",0.8681,4.6,7489.72],["2026-08",0.8803,4.68,7686.14],["2026-09",1.0773,4.99,7651.54],["2026-10",0.9089,5.13,7580.07]];
+const M=ROWS.map(r=>r[0]),TP=ROWS.map(r=>r[1]),Y=ROWS.map(r=>r[2]),SPX=ROWS.map(r=>r[3]);
+const dmod=y=>{const k=y/100;return (1-Math.pow(1+k/2,-20))/k};
+const DUR=Y.map(dmod);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtM=m=>{const [y,mo]=m.split('-');return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]+' '+y};
+let win={a:'2023-07',b:'2023-10'};
+const bandPlugin={id:'band',beforeDatasetsDraw(ch){const xs=ch.scales.x,i=ch.data.labels.indexOf(win.a),j=ch.data.labels.indexOf(win.b);if(i<0||j<0)return;const c=ch.ctx,a=ch.chartArea;c.save();c.fillStyle=css('--band');c.fillRect(xs.getPixelForValue(i),a.top,xs.getPixelForValue(j)-xs.getPixelForValue(i),a.bottom-a.top);c.restore();}};
+function base(){return{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{title:t=>fmtM(t[0].label)}}},
+ scales:{x:{ticks:{color:css('--muted'),maxTicksLimit:10,callback:function(v){const l=this.getLabelForValue(v);return l.slice(0,4)}},grid:{color:css('--line')}}}}}
+let c1,c2;
+function draw(){
+ c1&&c1.destroy();c2&&c2.destroy();
+ const o1=base();o1.scales.y={position:'left',title:{display:true,text:'Term premium, %',color:css('--muted')},ticks:{color:css('--muted')},grid:{color:css('--line')}};
+ o1.scales.y1={position:'right',title:{display:true,text:'Duration, years',color:css('--muted')},ticks:{color:css('--muted')},grid:{display:false}};
+ c1=new Chart(document.getElementById('c1'),{type:'line',data:{labels:M,datasets:[
+  {label:'Term premium %',data:TP,borderColor:css('--tp'),borderWidth:1.8,pointRadius:0,spanGaps:true,yAxisID:'y'},
+  {label:'Modified duration (yrs)',data:DUR.map(v=>+v.toFixed(3)),borderColor:css('--dur'),borderWidth:1.8,pointRadius:0,yAxisID:'y1'}]},options:o1});
+ const i0=M.indexOf('2016-11'),L=M.slice(i0);
+ const o2=base();o2.scales.y={position:'left',title:{display:true,text:'Term premium, %',color:css('--muted')},ticks:{color:css('--muted')},grid:{color:css('--line')}};
+ o2.scales.y1={position:'right',title:{display:true,text:'S&P 500',color:css('--muted')},ticks:{color:css('--muted')},grid:{display:false}};
+ c2=new Chart(document.getElementById('c2'),{type:'line',data:{labels:L,datasets:[
+  {label:'Term premium %',data:TP.slice(i0),borderColor:css('--tp'),borderWidth:1.8,pointRadius:0,spanGaps:true,yAxisID:'y'},
+  {label:'S&P 500',data:SPX.slice(i0),borderColor:css('--spx'),borderWidth:1.8,pointRadius:0,yAxisID:'y1'}]},options:o2,plugins:[bandPlugin]});
+}
+const idx=m=>M.indexOf(m);
+function stats(a,b){const i=idx(a),j=idx(b);return{
+ tp:[TP[i],TP[j],(TP[j]-TP[i])*100],
+ y:[Y[i],Y[j],(Y[j]-Y[i])*100],
+ d:[DUR[i],DUR[j],DUR[j]-DUR[i]],
+ s:[SPX[i],SPX[j],SPX[i]&&SPX[j]?(SPX[j]/SPX[i]-1)*100:null]}}
+const f=(v,d)=>v==null||isNaN(v)?'n/a':v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const sg=(v,d,u)=>v==null||isNaN(v)?'n/a':(v>0?'+':'')+f(v,d)+u;
+function table(){
+ const s=stats(win.a,win.b);
+ document.getElementById('tb').innerHTML=
+ `<tr><td>10y term premium (%)</td><td>${f(s.tp[0],2)}</td><td>${f(s.tp[1],2)}</td><td>${sg(s.tp[2],0,' bp')}</td></tr>
+  <tr><td>10y yield, monthly avg (%)</td><td>${f(s.y[0],2)}</td><td>${f(s.y[1],2)}</td><td>${sg(s.y[2],0,' bp')}</td></tr>
+  <tr><td>Modified duration (yrs)</td><td>${f(s.d[0],2)}</td><td>${f(s.d[1],2)}</td><td>${sg(s.d[2],2,'')}</td></tr>
+  <tr><td>S&amp;P 500</td><td>${f(s.s[0],2)}</td><td>${f(s.s[1],2)}</td><td>${sg(s.s[2],1,'%')}</td></tr>`;
+ c2&&c2.update('none');
+}
+function corr(){const i0=M.indexOf('2016-11');const x=[],y=[];for(let i=i0+1;i<M.length;i++){if(TP[i]==null||TP[i-1]==null)continue;x.push(TP[i]-TP[i-1]);y.push(Math.log(SPX[i]/SPX[i-1]))}
+ const mx=x.reduce((a,b)=>a+b)/x.length,my=y.reduce((a,b)=>a+b)/y.length;let sxy=0,sxx=0,syy=0;x.forEach((v,k)=>{sxy+=(v-mx)*(y[k]-my);sxx+=(v-mx)**2;syy+=(y[k]-my)**2});
+ return{r:sxy/Math.sqrt(sxx*syy),n:x.length}}
+function init(){
+ const fr=document.getElementById('from'),to=document.getElementById('to');
+ M.forEach(m=>{fr.add(new Option(fmtM(m),m));to.add(new Option(fmtM(m),m))});
+ fr.value=win.a;to.value=win.b;
+ fr.onchange=()=>{win.a=fr.value;table()};to.onchange=()=>{win.b=to.value;table()};
+ const k=corr();document.getElementById('corr').textContent=`Correlation of monthly term-premium changes with monthly S&P 500 log returns, Dec 2016 to Oct 2026: ${k.r.toFixed(2)} (n = ${k.n} months).`;
+ const s1=stats('2023-07','2023-10'),s2=stats('2023-10','2023-12');
+ document.getElementById('claim').innerHTML=`From the end of July 2023 to the end of October 2023 the 10-year term premium rose <b>${sg(s1.tp[2],0,' bp')}</b>, from <b>${f(s1.tp[0],2)}%</b> to <b>${f(s1.tp[1],2)}%</b>. Over the same window the S&amp;P 500 fell <b>${f(-s1.s[2],1)}%</b>, from <b>${f(s1.s[0],2)}</b> to <b>${f(s1.s[1],2)}</b>, and the 10-year par bond's modified duration fell from <b>${f(s1.d[0],2)}</b> to <b>${f(s1.d[1],2)}</b> years. When the term premium reversed by <b>${sg(s2.tp[2],0,' bp')}</b> through December 2023, the S&amp;P 500 gained <b>${sg(s2.s[2],1,'%')}</b>. A higher term premium raises the discount rate on long-dated cash flows, which pushes equity prices down.`;
+ draw();table();
+ try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw)}catch(e){}
+ new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+}
+init();
+</script>
+</body>
+</html>
